@@ -83,12 +83,6 @@ function par = conic2parametric(con)
         eigval(1) = eigval(2);
         eigval(2) = aux;
     end
-    % %     if (eigval(1) > eigval(2))
-    % %         aux = eigval(1);
-    % %         eigval(1) = eigval(2);
-    % %         eigval(2) = aux;
-    % %         disp("!!!!!");
-    % %     end
     
     % Parametric eq. params
     p_a = sqrt( -det(M0) / (det(M)*eigval(1)) );
@@ -98,10 +92,6 @@ function par = conic2parametric(con)
     p_t = acot( (c_A-c_C)/c_B )/2;
     % % p_t = (pi/2 - atan((c_A-c_C)/c_B))/2;
     par = [p_a, p_b, p_h, p_k, p_t]';
-
-%     disp(parametric2conic(par));
-%     res = abs(con - real(parametric2conic(par)));
-    %disp(res)
 end
 
 function con = parametric2conic(par)

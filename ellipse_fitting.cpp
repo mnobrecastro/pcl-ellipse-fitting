@@ -26,16 +26,16 @@ std::array<float, 6> parametric2conic(std::array<float, 5>);
 
 int main()//(int argc, char** argv)
 {
-    // initialize PointClouds
+    // Initialize the PointClouds
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_data(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out(new pcl::PointCloud<pcl::PointXYZ>);
 
-    int N(1000);
+    int N(20);
     std::array<float, 5> ellipse_par_model = { 2.0, 1.0, 1.0, 1.0, M_PI/10.0 };
     std::vector<std::array<float, 2>> ellipse = ellipse_generator(ellipse_par_model, { 0, 2*M_PI }, N, 0.0); //0.01
 
-    // populate our PointCloud with points
+    // PointCloud with points
     cloud_in->width = N;
     cloud_in->height = 1;
     cloud_in->is_dense = false;
@@ -44,11 +44,12 @@ int main()//(int argc, char** argv)
     {
         cloud_in->points[i].x = ellipse[i][0];
         cloud_in->points[i].y = ellipse[i][1];
-        cloud_in->points[i].z = 0;
+        cloud_in->points[i].z = 0.0;
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /*
     // Dataset of dummy ellipse points (testing purposes)
     Eigen::Vector3d p0(1.6823, 2.1258, 0.0); 
     Eigen::Vector3d p1(-0.2154, 1.5107, 0.0);
@@ -56,6 +57,17 @@ int main()//(int argc, char** argv)
     Eigen::Vector3d p3(0.3129, -0.1252, 0.0);
     Eigen::Vector3d p4(2.2218, 0.4890, 0.0);
     Eigen::Vector3d p5(2.9022, 1.6246, 0.0);
+    */
+    // Dataset of points selected from the ellipse_generator()
+    Eigen::Vector3d p0(cloud_in->points[0].x, cloud_in->points[0].y, cloud_in->points[0].z);
+    Eigen::Vector3d p1(cloud_in->points[1].x, cloud_in->points[1].y, cloud_in->points[1].z);
+    Eigen::Vector3d p2(cloud_in->points[2].x, cloud_in->points[2].y, cloud_in->points[2].z);
+    Eigen::Vector3d p3(cloud_in->points[3].x, cloud_in->points[3].y, cloud_in->points[3].z);
+    Eigen::Vector3d p4(cloud_in->points[4].x, cloud_in->points[4].y, cloud_in->points[4].z);
+    Eigen::Vector3d p5(cloud_in->points[5].x, cloud_in->points[5].y, cloud_in->points[5].z);
+    ////Eigen::Vector3d p6(cloud_in->points[600].x, cloud_in->points[600].y, cloud_in->points[600].z);
+
+    // Dataset of six (6) point used for fitting the ellipse
     cloud_data->push_back(pcl::PointXYZ(p0(0), p0(1), p0(2)));
     cloud_data->push_back(pcl::PointXYZ(p1(0), p1(1), p1(2)));
     cloud_data->push_back(pcl::PointXYZ(p2(0), p2(1), p2(2)));
@@ -63,14 +75,6 @@ int main()//(int argc, char** argv)
     cloud_data->push_back(pcl::PointXYZ(p4(0), p4(1), p4(2)));
     cloud_data->push_back(pcl::PointXYZ(p5(0), p5(1), p5(2)));
 
-    // Dataset of points selected from the ellipse_generator()
-    //Eigen::Vector3d p0(cloud->points[0].x, cloud->points[0].y, cloud->points[0].z);
-    //Eigen::Vector3d p1(cloud->points[100].x, cloud->points[100].y, cloud->points[100].z);
-    //Eigen::Vector3d p2(cloud->points[200].x, cloud->points[200].y, cloud->points[200].z);
-    //Eigen::Vector3d p3(cloud->points[300].x, cloud->points[300].y, cloud->points[300].z);
-    //Eigen::Vector3d p4(cloud->points[400].x, cloud->points[400].y, cloud->points[400].z);
-    //Eigen::Vector3d p5(cloud->points[500].x, cloud->points[500].y, cloud->points[500].z);
-    //Eigen::Vector3d p6(cloud->points[600].x, cloud->points[600].y, cloud->points[600].z);
     std::cout << "**** Points (global):\n"
         << p0.transpose() << std::endl
         << p1.transpose() << std::endl
@@ -79,27 +83,27 @@ int main()//(int argc, char** argv)
         << p4.transpose() << std::endl
         << p5.transpose() << std::endl;
 
-    Eigen::Vector3d helper_vec01 = p0 - p1;
-    Eigen::Vector3d helper_vec02 = p0 - p2;
-    Eigen::Vector3d helper_vec10 = p1 - p0;
-    Eigen::Vector3d helper_vec12 = p1 - p2;
-    Eigen::Vector3d helper_vec20 = p2 - p0;
-    Eigen::Vector3d helper_vec21 = p2 - p1;
+    //Eigen::Vector3d helper_vec01 = p0 - p1;
+    //Eigen::Vector3d helper_vec02 = p0 - p2;
+    //Eigen::Vector3d helper_vec10 = p1 - p0;
+    //Eigen::Vector3d helper_vec12 = p1 - p2;
+    //Eigen::Vector3d helper_vec20 = p2 - p0;
+    //Eigen::Vector3d helper_vec21 = p2 - p1;
 
-    Eigen::Vector3d common_helper_vec = helper_vec10.cross(helper_vec21);
-    Eigen::Vector3d ellipse_normal = common_helper_vec.normalized();
+    //Eigen::Vector3d common_helper_vec = helper_vec10.cross(helper_vec21);
+    //Eigen::Vector3d ellipse_normal = common_helper_vec.normalized();
 
-    // Coordinate transformation to a local reference frame (2D)
-    Eigen::Vector3d x_axis = (p1 - p0).normalized();
-    Eigen::Vector3d z_axis = ellipse_normal;
-    Eigen::Vector3d y_axis = z_axis.cross(x_axis).normalized();
+    //// Coordinate transformation to a local reference frame (2D)
+    //Eigen::Vector3d x_axis = (p1 - p0).normalized();
+    //Eigen::Vector3d z_axis = ellipse_normal;
+    //Eigen::Vector3d y_axis = z_axis.cross(x_axis).normalized();
 
-    // Create the transposed rotation matrix
-    Eigen::Matrix3d Rot;
-    Rot << x_axis(0), x_axis(1), x_axis(2),
-        y_axis(0), y_axis(1), y_axis(2),
-        z_axis(0), z_axis(1), z_axis(2);
-    std::cout << "**** Rot^T matrix:\n" << Rot << std::endl;
+    //// Create the transposed rotation matrix
+    //Eigen::Matrix3d Rot;
+    //Rot << x_axis(0), x_axis(1), x_axis(2),
+    //    y_axis(0), y_axis(1), y_axis(2),
+    //    z_axis(0), z_axis(1), z_axis(2);
+    //std::cout << "**** Rot^T matrix:\n" << Rot << std::endl;
 
     //// Convert the points to local coordinates
     //p0 = Rot * (p0 - p6);
@@ -149,19 +153,19 @@ int main()//(int argc, char** argv)
     //std::cout << "**** pinv(C) matrix:\n" << C_ << std::endl;
 
     
-    /* ---- [TEMPORARY BUG FIX] ----
-     * > Compilation error from using 'GeneralizedEigenSolver' due to overloading functions in PCL and Eigen libs.
-     * + Solution: add the namespaces Eigen::internal::aligned_free(ptr) to Eigen\src\Core\util\Memory.h (in line 334).
-     * https://github.com/PointCloudLibrary/pcl/issues/4734
+    /* ---- [ BUG FIX] ----
+     * > Compilation error may occur from using 'GeneralizedEigenSolver' due to overloading of functions in PCL and Eigen libs.
+     * + Solution: add the 'namespace pcl' to both 'aligned_{malloc,free}' in 'pcl/common/include/pcl/pcl_macros.h' (lines 379-415).
+     * This requires rebuilding the PCL lib from the source. More info can be found in the link below:
+     * https://github.com/PointCloudLibrary/pcl/issues/4734#issuecomment-830115801
      */
     // Solve the Generalized Eigensystem: S*a = lambda*C*a
     Eigen::GeneralizedEigenSolver<Eigen::MatrixXf> solver;
     solver.compute(S, C);
-    std::cout << "The (complex) numerators of the generalized eigenvalues are: " << solver.alphas().transpose() << std::endl;
-    std::cout << "The (real) denominators of the generalized eigenvalues are: " << solver.betas().transpose() << std::endl;
-    std::cout << "The (complex) generalized eigenvalues are (alphas./beta): " << std::endl << solver.eigenvalues().transpose() << std::endl;
-    std::cout << "The (complex) generalized eigenvectors are: " << std::endl << solver.eigenvectors() << std::endl;
-    std::cout << "The (complex) generalized eigenvectors are: " << std::endl << solver.eigenvectors().real() << std::endl;
+    //std::cout << "The (complex) numerators of the generalized eigenvalues are: " << solver.alphas().transpose() << std::endl;
+    //std::cout << "The (real) denominators of the generalized eigenvalues are: " << solver.betas().transpose() << std::endl;
+    //std::cout << "The (complex) generalized eigenvalues are (alphas./beta): " << std::endl << solver.eigenvalues().transpose() << std::endl;
+    //std::cout << "The (complex) generalized eigenvectors are: " << std::endl << solver.eigenvectors() << std::endl;
     Eigen::VectorXf eigvals = solver.eigenvalues().real();
     std::cout << "Real generalized eigenvalues: " << std::endl << eigvals.transpose() << std::endl;
     std::cout << "Real generalized eigenvectors: " << std::endl << solver.eigenvectors().real() << std::endl;
@@ -262,7 +266,7 @@ std::vector<std::array<float, 2>> ellipse_generator(std::array<float, 5> par, st
 
     // Generate the angle steps
     std::vector<float> th(n, 0.0);
-    for (std::size_t i(0); i < th.size(); ++i) { th[i] = i * (arc[1]-arc[0])/(n-1); }
+    for (std::size_t i(0); i < th.size(); ++i) { th[i] = arc[0] + i * (arc[1]-arc[0])/(n); }
     
     // Calculate Ellipse data points
     std::vector<std::array<float, 2>> pts(th.size(), {0.0,0.0});
