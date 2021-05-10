@@ -7,6 +7,7 @@
  */
 
 #include <iostream>
+#include <functional>
 #include <thread>
 #include <array>
 #include <vector>
@@ -25,6 +26,12 @@ std::array<float, 5> conic2parametric(std::array<float, 6>);
 std::array<float, 6> parametric2conic(std::array<float, 5>);
 std::vector<std::array<float, 2>> ellipse_generator(std::array<float, 5>, std::array<float, 2>, int, float);
 
+void ellipse(std::array<float, 5> par, float th, float& x, float& y);
+void ellipse(std::array<float, 5> par, float th, float& x, float& y, float& dx_dth, float& dy_dth);
+
+float dist2ellipse(std::array<float, 5> par, float u, float v);
+float point2ellipse(std::array<float, 5> par, float th, float u, float v);
+
 int main()//(int argc, char** argv)
 {
     // Initialize the PointClouds
@@ -34,6 +41,7 @@ int main()//(int argc, char** argv)
 
     int N(50);
     std::array<float, 5> ellipse_par_model = { 2.0, 1.0, 1.0, 1.0, M_PI/10.0 };
+    //std::array<float, 5> ellipse_par_model = { 2.0, 1.0, 0.0, 0.0, 0.0 };
     std::vector<std::array<float, 2>> ellipse = ellipse_generator(ellipse_par_model, { 0, M_PI/3 }, N, 0.01); //0.01
 
     // PointCloud with points
@@ -162,7 +170,6 @@ int main()//(int argc, char** argv)
 
     //////////////////////////////////////////////////////////////////////////////////////////////////  
 
-
     // Initialize the Visualizer
     pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
     int vp(0);
@@ -213,7 +220,8 @@ int main()//(int argc, char** argv)
 Eigen::VectorXf fit_ellipse(std::array<Eigen::Vector3d, 6> pts)
 {
     /*
-     * 
+     * Implementation of "Direct Least Square Fitting of Ellipses"
+     * (Fitzgibbon et al., 1999)
      */
 
     // 2D projections only
@@ -375,4 +383,112 @@ std::vector<std::array<float, 2>> ellipse_generator(std::array<float, 5> par, st
     }
 
     return pts;
+}
+
+
+
+
+void ellipse(std::array<float, 5> par, float th, float& x, float& y)
+{
+    /*
+     * Calculates a point on the ellipse model 'par' using the angle 'th'.
+     */
+
+    // Parametric eq.params
+    float par_a, par_b, par_h, par_k, par_t;
+    par_a = par[0]; par_b = par[1]; par_h = par[2]; par_k = par[3]; par_t = par[4];
+
+    x = par_h + std::cos(par_t) * par_a * std::cos(th) - std::sin(par_t) * par_b * std::sin(th);
+    y = par_k + std::sin(par_t) * par_a * std::cos(th) + std::cos(par_t) * par_b * std::sin(th);
+
+    return;
+}
+
+
+void ellipse(std::array<float, 5> par, float th, float& x, float& y, float& dx_dth, float& dy_dth)
+{
+    /*
+     * Calculates a point (x,y) and its derivative (dx_dth,dy_dth) on the ellipse model 'par' using the angle 'th'.
+     */
+
+     // Parametric eq.params
+    float par_a, par_b, par_h, par_k, par_t;
+    par_a = par[0]; par_b = par[1]; par_h = par[2]; par_k = par[3]; par_t = par[4];
+
+    ellipse(par, th, x, y);
+
+    dx_dth = -std::cos(par_t) * par_a * std::sin(th) - std::sin(par_t) * par_b * std::cos(th);
+    dy_dth = -std::sin(par_t) * par_a * std::sin(th) + std::cos(par_t) * par_b * std::cos(th);
+
+    return;
+}
+
+
+float dist2ellipse(std::array<float, 5> par, float u, float v)
+{
+    /*
+     * Minimum distance from point p=(u,v) to the ellipse model 'par'.
+     */
+
+     // Parametric eq.params
+    float par_a, par_b, par_h, par_k, par_t;
+    par_a = par[0]; par_b = par[1]; par_h = par[2]; par_k = par[3]; par_t = par[4];
+
+    Eigen::Vector2f center(par_h, par_k);
+    Eigen::Vector2f p(u, v);
+    p -= center;
+
+    // Local x-axis of the ellipse
+    Eigen::Vector2f x_axis;
+    ellipse(par, 0.0, x_axis(0), x_axis(1));
+    x_axis -= center;
+
+    // Local y-axis of the ellipse
+    Eigen::Vector2f y_axis;
+    ellipse(par, M_PI/2.0, y_axis(0), y_axis(1));
+    y_axis -= center;
+
+    // Convert the point p=(u,v) to local ellipse coordinates
+    float x_proj = p.dot(x_axis) / x_axis.norm();
+    float y_proj = p.dot(y_axis) / y_axis.norm();
+
+    // Find the ellipse quandrant to where the point p=(u,v) belongs,
+    // and limit the search interval to 'th_min' and 'th_max'.
+    float th_min, th_max;
+    float th = std::atan2(y_proj, x_proj);
+
+    if (-M_PI <= th && th < -M_PI/2.0) {
+        th_min = -M_PI;
+        th_max = -M_PI/2.0;
+    }
+    if (-M_PI/2.0 <= th && th < 0.0) {
+        th_min = -M_PI/2.0;
+        th_max = 0.0;
+    }
+    if (0.0 <= th && th < M_PI/2.0) {
+        th_min = 0.0;
+        th_max = M_PI/2.0;
+    }
+    if (M_PI/2.0 <= th && th <= M_PI) {
+        th_min = M_PI/2.0;
+        th_max = M_PI;
+    }
+
+    // Use an unconstrained line search optimizer
+    float d = 0.0;
+
+    return d;
+}
+
+
+float point2ellipse(std::array<float, 5> par, float th, float u, float v)
+{
+    /*
+     * Distance between a point (u,v) to a given point in the ellipse model 'par' at an angle 'th'.
+     */
+
+    float x, y;
+    ellipse(par, th, x, y);
+    float d = std::sqrt(std::pow(u - x, 2) + std::pow(v - y, 2));
+    return d;
 }
