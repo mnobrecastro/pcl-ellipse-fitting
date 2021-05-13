@@ -32,6 +32,10 @@ void ellipse(std::array<float, 5> par, float th, float& x, float& y, float& dx_d
 float dist2ellipse(std::array<float, 5> par, float u, float v);
 float point2ellipse(std::array<float, 5> par, float th, float u, float v);
 
+float golden_section_search(std::array<float, 5>par, float u, float v, std::function<float(std::array<float, 5>, float, float, float)> fobj,
+    float th_min, float th_max, float epsilon = 1e-6);
+float gradient_descent();
+
 int main()//(int argc, char** argv)
 {
     // Initialize the PointClouds
@@ -170,6 +174,30 @@ int main()//(int argc, char** argv)
 
     //////////////////////////////////////////////////////////////////////////////////////////////////  
 
+    // Dataset of six (6) point used for fitting the ellipse
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_dist(new pcl::PointCloud<pcl::PointXYZ>);
+    cloud_dist->push_back(pcl::PointXYZ(2.5, 0.0, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(0.0, 2.5, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(-2.5, 0.0, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(0.0, -2.5, 0.0));
+
+    cloud_dist->push_back(pcl::PointXYZ(0.5, 0.0, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(0.0, 0.5, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(-0.5, 0.0, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(0.0, -0.5, 0.0));
+
+    cloud_dist->push_back(pcl::PointXYZ(1.5, 1.0, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(-1.5, 1.0, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(-1.5, -1.0, 0.0));
+    cloud_dist->push_back(pcl::PointXYZ(1.5, -1.0, 0.0));
+
+    std::cout << std::endl;
+    for (auto p : cloud_dist->points) {
+        std::cout << "Distancy: " << dist2ellipse(par_model_out, p.x, p.x) << std::endl;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
     // Initialize the Visualizer
     pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
     int vp(0);
@@ -205,6 +233,20 @@ int main()//(int argc, char** argv)
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_out_color_h(255, 255, 0);
     cloud_out_color_h.setInputCloud(cloud_out);
     viewer->addPointCloud(cloud_out, cloud_out_color_h, "cloud_out");
+
+    // Dataset cloud
+    std::vector<pcl::ModelCoefficients::Ptr> sphs_dist;
+    //size_t k(0);
+    for (auto p : cloud_dist->points) {
+        pcl::ModelCoefficients::Ptr coefs(new pcl::ModelCoefficients);
+        coefs->values.push_back(p.x);
+        coefs->values.push_back(p.y);
+        coefs->values.push_back(p.z);
+        coefs->values.push_back(0.05);
+        sphs_dist.push_back(coefs);
+        ++k;
+        viewer->addSphere(*coefs, std::to_string(k));
+    }
 
     while (!viewer->wasStopped())
     {
@@ -475,11 +517,10 @@ float dist2ellipse(std::array<float, 5> par, float u, float v)
     }
 
     // Use an unconstrained line search optimizer
-    float d = 0.0;
-
+    float th_opt = golden_section_search(par, u, v, &point2ellipse, th_min, th_max);
+    float d = point2ellipse(par, th_opt, u, v);
     return d;
 }
-
 
 float point2ellipse(std::array<float, 5> par, float th, float u, float v)
 {
@@ -491,4 +532,39 @@ float point2ellipse(std::array<float, 5> par, float th, float u, float v)
     ellipse(par, th, x, y);
     float d = std::sqrt(std::pow(u - x, 2) + std::pow(v - y, 2));
     return d;
+}
+
+float golden_section_search(std::array<float, 5>par, float u, float v, std::function<float(std::array<float, 5>, float, float, float)> fobj,
+    float th_min, float th_max, float epsilon)
+{
+    /*
+     * Golden section search
+     */
+
+     // Golden Ratio
+    float M_PHI((1 + std::sqrt(5)) / 2.0);
+
+    float tl(th_min), tu(th_max), ta, tb;
+    ta = tl + (tu - tl) * (1 - 1 / M_PHI);
+    tb = tl + (tu - tl) * 1 / M_PHI;
+
+    while (tu - tl > epsilon) {
+        if (fobj(par, ta, u, v) < fobj(par, tb, u, v)) {
+            tu = tb;
+            tb = ta;
+            ta = tl + (tu - tl) * (1 - 1 / M_PHI);
+        }
+        else if (fobj(par, ta, u, v) > fobj(par, tb, u, v)) {
+            tl = ta;
+            ta = tb;
+            tb = tl + (tu - tl) * 1 / M_PHI;
+        }
+        else {
+            tl = ta;
+            tu = tb;
+            ta = tl + (tu - tl) * (1 - 1 / M_PHI);
+            tb = tl + (tu - tl) * 1 / M_PHI;
+        }
+    }
+    return (tl + tu) / 2.0;
 }
