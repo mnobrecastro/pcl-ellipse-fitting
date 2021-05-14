@@ -26,10 +26,10 @@ std::array<float, 5> conic2parametric(std::array<float, 6>);
 std::array<float, 6> parametric2conic(std::array<float, 5>);
 std::vector<std::array<float, 2>> ellipse_generator(std::array<float, 5>, std::array<float, 2>, int, float);
 
-void ellipse(std::array<float, 5> par, float th, float& x, float& y);
-void ellipse(std::array<float, 5> par, float th, float& x, float& y, float& dx_dth, float& dy_dth);
+void get_ellipse_point(std::array<float, 5> par, float th, float& x, float& y);
+void get_ellipse_point(std::array<float, 5> par, float th, float& x, float& y, float& dx_dth, float& dy_dth);
 
-float dist2ellipse(std::array<float, 5> par, float u, float v);
+float dist2ellipse(std::array<float, 5> par, float u, float v, float& th_opt);
 float point2ellipse(std::array<float, 5> par, float th, float u, float v);
 
 float golden_section_search(std::array<float, 5>par, float u, float v, std::function<float(std::array<float, 5>, float, float, float)> fobj,
@@ -45,8 +45,11 @@ int main()//(int argc, char** argv)
 
     int N(50);
     std::array<float, 5> ellipse_par_model = { 2.0, 1.0, 1.0, 1.0, M_PI/10.0 };
-    //std::array<float, 5> ellipse_par_model = { 2.0, 1.0, 0.0, 0.0, 0.0 };
-    std::vector<std::array<float, 2>> ellipse = ellipse_generator(ellipse_par_model, { 0, M_PI/3 }, N, 0.01); //0.01
+    std::vector<std::array<float, 2>> ellipse = ellipse_generator(ellipse_par_model, { 0, M_PI/3 }, N, 0.01);
+    //std::array<float, 5> ellipse_par_model = { 2.0, 1.0, 0.0, 0.0, 1/180*M_PI }; //
+    //std::vector<std::array<float, 2>> ellipse = ellipse_generator(ellipse_par_model, { 0, 3.0*M_PI/2.0 }, N, 0.01);
+    //std::array<float, 5> ellipse_par_model = { 2.0, 1.0, 0.0, 0.0, M_PI / 4 }; //1/180*M_PI
+    //std::vector<std::array<float, 2>> ellipse = ellipse_generator(ellipse_par_model, { 0, 3.0*M_PI/2.0 }, N, 0.01);
 
     // PointCloud with points
     cloud_in->width = N;
@@ -175,6 +178,7 @@ int main()//(int argc, char** argv)
     //////////////////////////////////////////////////////////////////////////////////////////////////  
 
     // Dataset of six (6) point used for fitting the ellipse
+    std::array<float, 12> vec_th_opt({0.0});
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_dist(new pcl::PointCloud<pcl::PointXYZ>);
     cloud_dist->push_back(pcl::PointXYZ(2.5, 0.0, 0.0));
     cloud_dist->push_back(pcl::PointXYZ(0.0, 2.5, 0.0));
@@ -192,8 +196,8 @@ int main()//(int argc, char** argv)
     cloud_dist->push_back(pcl::PointXYZ(1.5, -1.0, 0.0));
 
     std::cout << std::endl;
-    for (auto p : cloud_dist->points) {
-        std::cout << "Distancy: " << dist2ellipse(par_model_out, p.x, p.x) << std::endl;
+    for (size_t i = 0; i < cloud_dist->points.size(); ++i) {
+        std::cout << "Distancy (" << i << "): " << dist2ellipse(par_model_out, cloud_dist->points[i].x, cloud_dist->points[i].y, vec_th_opt[i]) << std::endl;
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -227,16 +231,17 @@ int main()//(int argc, char** argv)
         coefs->values.push_back(0.05);
         sphs.push_back(coefs);
         ++k;
-        viewer->addSphere(*coefs, std::to_string(k));
+        //viewer->addSphere(*coefs, "set" + std::to_string(k));
+        viewer->addSphere(p, 0.05, 1.0, 0.0, 1.0, "set" + std::to_string(k));// , int viewport)
     }
 
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_out_color_h(255, 255, 0);
     cloud_out_color_h.setInputCloud(cloud_out);
     viewer->addPointCloud(cloud_out, cloud_out_color_h, "cloud_out");
 
-    // Dataset cloud
+    // Dataset points
     std::vector<pcl::ModelCoefficients::Ptr> sphs_dist;
-    //size_t k(0);
+    size_t j(0);
     for (auto p : cloud_dist->points) {
         pcl::ModelCoefficients::Ptr coefs(new pcl::ModelCoefficients);
         coefs->values.push_back(p.x);
@@ -244,8 +249,14 @@ int main()//(int argc, char** argv)
         coefs->values.push_back(p.z);
         coefs->values.push_back(0.05);
         sphs_dist.push_back(coefs);
-        ++k;
-        viewer->addSphere(*coefs, std::to_string(k));
+        viewer->addSphere(*coefs, "pts" + std::to_string(j));
+
+        // Draw the respective "shortest distance to ellipse" line
+        float elp_x(0.0), elp_y(0.0), elp_z(0.0);
+        get_ellipse_point(par_model_out, vec_th_opt[j], elp_x, elp_y);
+        viewer->addLine(pcl::PointXYZ(p.x, p.y, p.z), pcl::PointXYZ(elp_x, elp_y, elp_z), "line" + std::to_string(j));
+
+        ++j;
     }
 
     while (!viewer->wasStopped())
@@ -430,7 +441,7 @@ std::vector<std::array<float, 2>> ellipse_generator(std::array<float, 5> par, st
 
 
 
-void ellipse(std::array<float, 5> par, float th, float& x, float& y)
+void get_ellipse_point(std::array<float, 5> par, float th, float& x, float& y)
 {
     /*
      * Calculates a point on the ellipse model 'par' using the angle 'th'.
@@ -447,7 +458,7 @@ void ellipse(std::array<float, 5> par, float th, float& x, float& y)
 }
 
 
-void ellipse(std::array<float, 5> par, float th, float& x, float& y, float& dx_dth, float& dy_dth)
+void get_ellipse_point(std::array<float, 5> par, float th, float& x, float& y, float& dx_dth, float& dy_dth)
 {
     /*
      * Calculates a point (x,y) and its derivative (dx_dth,dy_dth) on the ellipse model 'par' using the angle 'th'.
@@ -457,7 +468,7 @@ void ellipse(std::array<float, 5> par, float th, float& x, float& y, float& dx_d
     float par_a, par_b, par_h, par_k, par_t;
     par_a = par[0]; par_b = par[1]; par_h = par[2]; par_k = par[3]; par_t = par[4];
 
-    ellipse(par, th, x, y);
+    get_ellipse_point(par, th, x, y);
 
     dx_dth = -std::cos(par_t) * par_a * std::sin(th) - std::sin(par_t) * par_b * std::cos(th);
     dy_dth = -std::sin(par_t) * par_a * std::sin(th) + std::cos(par_t) * par_b * std::cos(th);
@@ -466,7 +477,7 @@ void ellipse(std::array<float, 5> par, float th, float& x, float& y, float& dx_d
 }
 
 
-float dist2ellipse(std::array<float, 5> par, float u, float v)
+float dist2ellipse(std::array<float, 5> par, float u, float v, float& th_opt)
 {
     /*
      * Minimum distance from point p=(u,v) to the ellipse model 'par'.
@@ -482,12 +493,12 @@ float dist2ellipse(std::array<float, 5> par, float u, float v)
 
     // Local x-axis of the ellipse
     Eigen::Vector2f x_axis;
-    ellipse(par, 0.0, x_axis(0), x_axis(1));
+    get_ellipse_point(par, 0.0, x_axis(0), x_axis(1));
     x_axis -= center;
 
     // Local y-axis of the ellipse
     Eigen::Vector2f y_axis;
-    ellipse(par, M_PI/2.0, y_axis(0), y_axis(1));
+    get_ellipse_point(par, M_PI/2.0, y_axis(0), y_axis(1));
     y_axis -= center;
 
     // Convert the point p=(u,v) to local ellipse coordinates
@@ -496,28 +507,33 @@ float dist2ellipse(std::array<float, 5> par, float u, float v)
 
     // Find the ellipse quandrant to where the point p=(u,v) belongs,
     // and limit the search interval to 'th_min' and 'th_max'.
-    float th_min, th_max;
+    float th_min(0.0), th_max(0.0);
     float th = std::atan2(y_proj, x_proj);
+    std::cout << "Point (" << u << "," << v << "): ";
 
     if (-M_PI <= th && th < -M_PI/2.0) {
         th_min = -M_PI;
         th_max = -M_PI/2.0;
+        std::cout << "Q3 " << th * 180 / M_PI << std::endl;
     }
     if (-M_PI/2.0 <= th && th < 0.0) {
         th_min = -M_PI/2.0;
         th_max = 0.0;
+        std::cout << "Q4 " << th * 180 / M_PI << std::endl;
     }
     if (0.0 <= th && th < M_PI/2.0) {
         th_min = 0.0;
         th_max = M_PI/2.0;
+        std::cout << "Q1 " << th * 180 / M_PI << std::endl;
     }
     if (M_PI/2.0 <= th && th <= M_PI) {
         th_min = M_PI/2.0;
         th_max = M_PI;
+        std::cout << "Q2 " << th * 180 / M_PI << std::endl;
     }
 
     // Use an unconstrained line search optimizer
-    float th_opt = golden_section_search(par, u, v, &point2ellipse, th_min, th_max);
+    th_opt = golden_section_search(par, u, v, &point2ellipse, th_min, th_max, 1.0e-3);
     float d = point2ellipse(par, th_opt, u, v);
     return d;
 }
@@ -528,8 +544,8 @@ float point2ellipse(std::array<float, 5> par, float th, float u, float v)
      * Distance between a point (u,v) to a given point in the ellipse model 'par' at an angle 'th'.
      */
 
-    float x, y;
-    ellipse(par, th, x, y);
+    float x(0.0), y(0.0);
+    get_ellipse_point(par, th, x, y);
     float d = std::sqrt(std::pow(u - x, 2) + std::pow(v - y, 2));
     return d;
 }
@@ -541,14 +557,16 @@ float golden_section_search(std::array<float, 5>par, float u, float v, std::func
      * Golden section search
      */
 
-     // Golden Ratio
-    float M_PHI((1 + std::sqrt(5)) / 2.0);
+    // Golden Ratio
+    float M_PHI((1 + std::sqrt(5.0)) / 2.0);
 
-    float tl(th_min), tu(th_max), ta, tb;
+    float tl(th_min), tu(th_max), ta(0.0), tb(0.0);
     ta = tl + (tu - tl) * (1 - 1 / M_PHI);
     tb = tl + (tu - tl) * 1 / M_PHI;
 
-    while (tu - tl > epsilon) {
+    std::cout << "*** GSS (" << u << "," << v << ") ****" << std::endl;
+    std::cout << "\t" << (tl + tu) / 2.0 << "\t" << fobj(par, (tl + tu) / 2.0, u, v) << std::endl;
+    while ((tu - tl) > epsilon) {
         if (fobj(par, ta, u, v) < fobj(par, tb, u, v)) {
             tu = tb;
             tb = ta;
@@ -565,6 +583,7 @@ float golden_section_search(std::array<float, 5>par, float u, float v, std::func
             ta = tl + (tu - tl) * (1 - 1 / M_PHI);
             tb = tl + (tu - tl) * 1 / M_PHI;
         }
+        std::cout << "\t" << (tl + tu) / 2.0 << "\t" << fobj(par, (tl + tu) / 2.0, u, v) << std::endl;
     }
     return (tl + tu) / 2.0;
 }
