@@ -2,14 +2,8 @@ cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
 project(pcl-ellipse-fitting)
 
-#set(CMAKE_CXX_STANDARD 17)
-#set(CMAKE_CXX_STANDARD_REQUIRED ON)
-#set(CMAKE_CXX_EXTENSIONS OFF)
+include_directories(src)
 
-find_package(PCL 1.11 REQUIRED)
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
-
-add_executable (ellipse_fitting ellipse_fitting.cpp)
-target_link_libraries (ellipse_fitting ${PCL_LIBRARIES})
+add_subdirectory(src)
+#add_subdirectory(test)
+#add_subdirectory(dependencies/googletest)
